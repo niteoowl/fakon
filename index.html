@@ -14,16 +14,12 @@
     <h3>친구 목록:</h3>
     <div id="friend-list" style="margin-bottom:20px;"></div>
 
-    <h3>보낼 메시지를 선택하세요:</h3>
-    <div id="message-buttons" style="display:none;"></div>
-
     <script>
         Kakao.init('4c62b1f03c15f3974661385234e62229');
 
-        let friendUUIDs = [];
         let selectedFriendUUID = null;
 
-        // 닉네임 표시
+        // 내 닉네임 표시
         function showNickname() {
             Kakao.API.request({ url: '/v2/user/me' })
             .then(res => {
@@ -31,69 +27,41 @@
                 document.getElementById('nickname-display').textContent = nickname;
                 console.log('내 닉네임:', nickname);
             })
-            .catch(err => {
-                console.error('사용자 정보 요청 실패:', err);
-            });
+            .catch(err => console.error('사용자 정보 요청 실패:', err));
         }
 
-        // 친구 목록 표시 및 UUID 저장
+        // 친구 목록 중 하나 선택 가능하도록 버튼 생성 (맥도날드만)
         function showFriends() {
             Kakao.API.request({ url: '/v1/api/talk/friends' })
             .then(res => {
-                if(!res.elements || res.elements.length === 0) {
+                if (!res.elements || res.elements.length === 0) {
                     alert('친구가 없습니다.');
                     return;
                 }
-                friendUUIDs = res.elements;
                 const friendListDiv = document.getElementById('friend-list');
                 friendListDiv.innerHTML = '';
-                res.elements.forEach(friend => {
-                    const btn = document.createElement('button');
-                    btn.textContent = friend.profile_nickname;
-                    btn.style.marginRight = '10px';
-                    btn.onclick = () => {
-                        selectedFriendUUID = friend.uuid;
-                        alert(`${friend.profile_nickname}님이 선택되었습니다.`);
-                        showMessageButtons();
-                    };
-                    friendListDiv.appendChild(btn);
-                });
-            })
-            .catch(err => {
-                console.error('친구 목록 요청 실패:', err);
-            });
-        }
 
-        // 메시지 버튼 생성
-        function showMessageButtons() {
-            if(!selectedFriendUUID) {
-                alert('친구를 먼저 선택하세요.');
-                return;
-            }
+                const macdonaldFriend = res.elements.find(f => f.profile_nickname === '맥도날드');
+                if (!macdonaldFriend) {
+                    alert('맥도날드 친구가 없습니다.');
+                    return;
+                }
 
-            const messages = [
-                "오늘 당첨되셨습니다!",
-                "배송이 지연됩니다. 확인 바랍니다.",
-                "인증번호: 582193"
-            ];
-
-            const container = document.getElementById('message-buttons');
-            container.innerHTML = '';
-            container.style.display = 'block';
-
-            messages.forEach(msg => {
                 const btn = document.createElement('button');
-                btn.textContent = msg;
-                btn.style.marginRight = '10px';
-                btn.onclick = () => sendKakaoMessage(msg);
-                container.appendChild(btn);
-            });
+                btn.textContent = '맥도날드 세트 선물 보내기';
+                btn.onclick = () => {
+                    selectedFriendUUID = macdonaldFriend.uuid;
+                    sendGift();
+                };
+                friendListDiv.appendChild(btn);
+            })
+            .catch(err => console.error('친구 목록 요청 실패:', err));
         }
 
-        // 메시지 전송 함수
-        function sendKakaoMessage(message) {
-            if(!selectedFriendUUID) {
-                alert('보낼 친구를 먼저 선택하세요.');
+        // 메시지 전송
+        function sendGift() {
+            if (!selectedFriendUUID) {
+                alert('친구를 선택하세요.');
                 return;
             }
 
@@ -101,30 +69,27 @@
                 url: '/v1/api/talk/friends/message/send',
                 data: {
                     receiver_uuids: [selectedFriendUUID],
-                    template_id: 120980,
-                    template_args: {
-                        message: message
-                    }
+                    template_id: 120980
                 }
             })
-            .then(res => {
+            .then(response => {
                 alert('메시지 전송 성공!');
-                console.log('메시지 전송 결과:', res);
+                console.log('전송 결과:', response);
             })
-            .catch(err => {
+            .catch(error => {
                 alert('메시지 전송 실패');
-                console.error('메시지 전송 에러:', err);
+                console.error('에러:', error);
             });
         }
 
-        // 로그인 후 초기화 함수
+        // 로그인 후 초기화
         function afterLogin() {
             showNickname();
             showFriends();
         }
 
-        // 페이지 로드 시 로그인 토큰 있으면 자동 로그인 처리
-        if(Kakao.Auth.getAccessToken()) {
+        // 페이지 로드시 이미 로그인 상태면 초기화
+        if (Kakao.Auth.getAccessToken()) {
             afterLogin();
         }
 
@@ -132,12 +97,8 @@
         document.getElementById('kakao-login-btn').addEventListener('click', () => {
             Kakao.Auth.login({
                 scope: 'friends',
-                success: () => {
-                    afterLogin();
-                },
-                fail: err => {
-                    console.error('로그인 실패:', err);
-                }
+                success: () => afterLogin(),
+                fail: err => console.error('로그인 실패:', err)
             });
         });
     </script>
