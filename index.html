@@ -3,103 +3,104 @@
 <head>
     <title>FACON - 기프티콘 낚시</title>
     <meta charset="utf-8"/>
+    <!-- 카카오 SDK 로드 -->
     <script src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
 </head>
 <body>
+    <!-- 로그인 버튼 -->
     <button id="kakao-login-btn">카카오 로그인</button>
-
-    <h3>내 닉네임:</h3>
-    <div id="nickname-display"></div>
-
-    <h3>친구 목록:</h3>
-    <div id="friend-list" style="margin-bottom:20px;"></div>
+    <!-- 친구에게 메시지 보내기 버튼 -->
+    <button id="send-friend-msg-btn" disabled>친구에게 메시지 보내기</button>
 
     <script>
+        // 1. SDK 초기화
         Kakao.init('4c62b1f03c15f3974661385234e62229');
 
-        let selectedFriendUUID = null;
+        let userUuidList = []; // 친구 UUID 저장용
+        let templateId = 12345; // 사용자 정의 메시지 템플릿 ID, 실제로 본인 템플릿 ID로 바꾸세요.
 
-        // 내 닉네임 표시
-        function showNickname() {
-            Kakao.API.request({ url: '/v2/user/me' })
-            .then(res => {
-                const nickname = res.properties.nickname;
-                document.getElementById('nickname-display').textContent = nickname;
-                console.log('내 닉네임:', nickname);
-            })
-            .catch(err => console.error('사용자 정보 요청 실패:', err));
+        // 2. 로그인 후 사용자 정보 요청
+        function fetchUserInfo() {
+            Kakao.API.request({
+                url: '/v2/user/me',
+                success: function(response) {
+                    let nickname = response['properties']['nickname'];
+                    console.log('닉네임:', nickname);
+                    // 로그인 되었으면 친구 목록 요청
+                    fetchFriendList();
+                },
+                fail: function(error) {
+                    console.error(error);
+                }
+            });
         }
 
-        // 친구 목록 중 하나 선택 가능하도록 버튼 생성 (맥도날드만)
-        function showFriends() {
-            Kakao.API.request({ url: '/v1/api/talk/friends' })
-            .then(res => {
-                if (!res.elements || res.elements.length === 0) {
-                    alert('친구가 없습니다.');
-                    return;
+        // 3. 친구 목록 가져오기 (최대 5명, uuid만 받음)
+        function fetchFriendList() {
+            Kakao.API.request({
+                url: '/v1/api/talk/friends',
+                success: function(response) {
+                    console.log('친구 목록:', response);
+                    userUuidList = response.elements.map(friend => friend.uuid);
+                    if(userUuidList.length > 0) {
+                        document.getElementById('send-friend-msg-btn').disabled = false;
+                    } else {
+                        alert('친구가 없거나 메시지 전송 권한이 없습니다.');
+                    }
+                },
+                fail: function(error) {
+                    console.error('친구 목록 요청 실패:', error);
                 }
-                const friendListDiv = document.getElementById('friend-list');
-                friendListDiv.innerHTML = '';
-
-                const macdonaldFriend = res.elements.find(f => f.profile_nickname === '맥도날드');
-                if (!macdonaldFriend) {
-                    alert('맥도날드 친구가 없습니다.');
-                    return;
-                }
-
-                const btn = document.createElement('button');
-                btn.textContent = '맥도날드 세트 선물 보내기';
-                btn.onclick = () => {
-                    selectedFriendUUID = macdonaldFriend.uuid;
-                    sendGift();
-                };
-                friendListDiv.appendChild(btn);
-            })
-            .catch(err => console.error('친구 목록 요청 실패:', err));
+            });
         }
 
-        // 메시지 전송
-        function sendGift() {
-            if (!selectedFriendUUID) {
-                alert('친구를 선택하세요.');
+        // 4. 친구에게 메시지 보내기
+        function sendMessageToFriends() {
+            if(userUuidList.length === 0) {
+                alert('메시지를 보낼 친구가 없습니다.');
                 return;
             }
 
             Kakao.API.request({
                 url: '/v1/api/talk/friends/message/send',
                 data: {
-                    receiver_uuids: [selectedFriendUUID],
-                    template_id: 120980
+                    receiver_uuids: userUuidList.slice(0, 5), // 최대 5명
+                    template_id: templateId,
+                    // template_args: { // 필요 시 템플릿 변수 채움
+                    //     name: '홍길동'
+                    // }
                 }
             })
-            .then(response => {
-                alert('메시지 전송 성공!');
-                console.log('전송 결과:', response);
+            .then(function(response) {
+                console.log('메시지 전송 성공:', response);
+                alert('메시지를 성공적으로 보냈습니다.');
             })
-            .catch(error => {
-                alert('메시지 전송 실패');
-                console.error('에러:', error);
+            .catch(function(error) {
+                console.error('메시지 전송 실패:', error);
+                alert('메시지 전송에 실패했습니다.');
             });
         }
 
-        // 로그인 후 초기화
-        function afterLogin() {
-            showNickname();
-            showFriends();
-        }
-
-        // 페이지 로드시 이미 로그인 상태면 초기화
+        // 5. 초기 로그인 상태 체크
         if (Kakao.Auth.getAccessToken()) {
-            afterLogin();
+            fetchUserInfo();
         }
 
-        // 로그인 버튼 클릭 이벤트
-        document.getElementById('kakao-login-btn').addEventListener('click', () => {
+        // 6. 로그인 버튼 클릭 시
+        document.getElementById('kakao-login-btn').addEventListener('click', function() {
             Kakao.Auth.login({
-                scope: 'friends',
-                success: () => afterLogin(),
-                fail: err => console.error('로그인 실패:', err)
+                success: function(authObj) {
+                    fetchUserInfo();
+                },
+                fail: function(err) {
+                    console.error(err);
+                }
             });
+        });
+
+        // 7. 메시지 보내기 버튼 클릭 시
+        document.getElementById('send-friend-msg-btn').addEventListener('click', function() {
+            sendMessageToFriends();
         });
     </script>
 </body>
