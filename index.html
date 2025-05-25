@@ -8,106 +8,120 @@
 <body>
     <button id="kakao-login-btn">카카오 로그인</button>
 
-    <h3>보낼 페이크 메시지를 선택하세요:</h3>
-    <div id="message-buttons" style="display:none;">
-        <!-- 메시지 버튼들이 여기 생성됨 -->
-    </div>
+    <h3>보낼 친구를 선택하세요:</h3>
+    <div id="friend-list" style="margin-bottom:20px;"></div>
+
+    <h3>보낼 메시지를 선택하세요:</h3>
+    <div id="message-buttons" style="display:none;"></div>
 
     <script>
         Kakao.init('4c62b1f03c15f3974661385234e62229');
 
         let friendUUIDs = [];  // 친구 UUID 저장용
+        let selectedFriendUUID = null;
 
-        // 로그인 성공 후 실행할 함수
+        // 로그인 성공 후 처리
         function afterLogin() {
-            // 사용자 정보 요청 (닉네임 출력)
-            Kakao.API.request({
-                url: '/v2/user/me',
-                success: function(response) {
-                    let nickname = response['properties']['nickname'];
-                    console.log(nickname);
-                },
-                fail: function(error) {
-                    console.error(error);
-                }
+            // 사용자 정보 출력
+            Kakao.API.request({ url: '/v2/user/me' })
+            .then(response => {
+                let nickname = response.properties.nickname;
+                console.log('내 닉네임:', nickname);
             });
 
-            // 친구 목록 요청 (friends scope 필요)
-            Kakao.API.request({
-                url: '/v1/api/talk/friends'
-            }).then(function(res) {
-                friendUUIDs = res.elements.map(el => el.uuid);
-                console.log('친구 UUID 목록:', friendUUIDs);
-
+            // 친구 목록 요청
+            Kakao.API.request({ url: '/v1/api/talk/friends' })
+            .then(res => {
+                friendUUIDs = res.elements;
                 if(friendUUIDs.length === 0) {
-                    alert('친구가 없습니다. 메시지 전송 불가.');
+                    alert('친구가 없습니다. 메시지 전송이 불가합니다.');
                     return;
                 }
 
-                // 메시지 버튼 생성
-                const messages = [
-                    "오늘 당첨되셨습니다!",
-                    "배송이 지연됩니다. 확인 바랍니다.",
-                    "인증번호: 582193"
-                ];
-
-                const container = document.getElementById('message-buttons');
-                container.innerHTML = ''; // 초기화
-                messages.forEach(msg => {
+                // 친구 리스트 UI 만들기
+                const friendListDiv = document.getElementById('friend-list');
+                friendListDiv.innerHTML = ''; // 초기화
+                friendUUIDs.forEach(friend => {
                     const btn = document.createElement('button');
-                    btn.textContent = msg;
-                    btn.onclick = () => sendKakaoMessage(msg);
-                    container.appendChild(btn);
+                    btn.textContent = friend.profile_nickname;
+                    btn.style.marginRight = '10px';
+                    btn.onclick = () => {
+                        selectedFriendUUID = friend.uuid;
+                        alert(friend.profile_nickname + '님이 선택되었습니다.');
+                        showMessageButtons();
+                    };
+                    friendListDiv.appendChild(btn);
                 });
-                container.style.display = 'block';
-            }).catch(function(err) {
-                console.error('친구 목록 요청 실패:', err);
+            })
+            .catch(err => {
+                console.error('친구 목록 불러오기 실패:', err);
             });
         }
 
-        // 메시지 보내기 함수
-        function sendKakaoMessage(selectedMsg) {
-            if(friendUUIDs.length === 0) {
-                alert('친구 UUID가 없습니다.');
+        // 메시지 버튼 보여주기
+        function showMessageButtons() {
+            if (!selectedFriendUUID) {
+                alert('친구를 먼저 선택해주세요.');
                 return;
             }
 
-            // 예시로 첫번째 친구에게 보내기
-            const receiver = friendUUIDs[0];
+            const messages = [
+                "오늘 당첨되셨습니다!",
+                "배송이 지연됩니다. 확인 바랍니다.",
+                "인증번호: 582193"
+            ];
+
+            const container = document.getElementById('message-buttons');
+            container.innerHTML = '';
+            container.style.display = 'block';
+
+            messages.forEach(msg => {
+                const btn = document.createElement('button');
+                btn.textContent = msg;
+                btn.style.marginRight = '10px';
+                btn.onclick = () => sendKakaoMessage(msg);
+                container.appendChild(btn);
+            });
+        }
+
+        // 메시지 전송
+        function sendKakaoMessage(selectedMsg) {
+            if (!selectedFriendUUID) {
+                alert('보낼 친구를 먼저 선택하세요.');
+                return;
+            }
 
             Kakao.API.request({
                 url: '/v1/api/talk/friends/message/send',
                 data: {
-                    receiver_uuids: [receiver],
+                    receiver_uuids: [selectedFriendUUID],
                     template_id: 120980,
                     template_args: {
                         message: selectedMsg
                     }
                 }
-            }).then(function(response) {
+            })
+            .then(response => {
                 alert('메시지 전송 성공!');
                 console.log(response);
-            }).catch(function(error) {
+            })
+            .catch(error => {
                 alert('메시지 전송 실패');
                 console.error(error);
             });
         }
 
-        // 페이지 로드시 로그인 토큰 있으면 자동 실행
+        // 자동 로그인 체크
         if (Kakao.Auth.getAccessToken()) {
             afterLogin();
         }
 
-        // 로그인 버튼 클릭
-        document.getElementById('kakao-login-btn').addEventListener('click', function() {
+        // 로그인 버튼 이벤트
+        document.getElementById('kakao-login-btn').addEventListener('click', () => {
             Kakao.Auth.login({
                 scope: 'friends',
-                success: function() {
-                    afterLogin();
-                },
-                fail: function(err) {
-                    console.error('로그인 실패:', err);
-                }
+                success: () => afterLogin(),
+                fail: err => console.error('로그인 실패:', err)
             });
         });
     </script>
