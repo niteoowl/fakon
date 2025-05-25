@@ -7,24 +7,39 @@
     <script src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
 </head>
 <body>
-    <!-- 로그인 버튼은 body 안에 별도로 작성 -->
+    <!-- 로그인 버튼 -->
     <button id="kakao-login-btn">카카오 로그인</button>
 
     <script>
-        // SDK 초기화 (JavaScript 키로 변경)
+        // 1. SDK 초기화
         Kakao.init('4c62b1f03c15f3974661385234e62229');
 
-        // 로그인 버튼 클릭 이벤트 등록
+        // 2. 페이지 로드시 로그인 상태면 사용자 정보 요청
+        if (Kakao.Auth.getAccessToken()) {
+            Kakao.API.request({
+                url: '/v2/user/me',
+                success: function(response) {
+                    console.log('페이지 로드 시 사용자 정보', response);
+                },
+                fail: function(error) {
+                    console.log('페이지 로드 시 요청 실패', error);
+                }
+            });
+        } else {
+            console.log('로그인된 상태가 아닙니다.');
+        }
+
+        // 3. 로그인 버튼 클릭 시 동작
         document.getElementById('kakao-login-btn').addEventListener('click', function() {
             Kakao.Auth.login({
                 success: function(authObj) {
                     console.log('로그인 성공', authObj);
 
-                    // 로그인 성공 후 사용자 정보 요청
+                    // 로그인 후 사용자 정보 요청
                     Kakao.API.request({
                         url: '/v2/user/me',
                         success: function(user) {
-                            console.log('사용자 정보', user);
+                            console.log('로그인 후 사용자 정보', user);
                         },
                         fail: function(error) {
                             console.error('사용자 정보 요청 실패', error);
