@@ -3,53 +3,110 @@
 <head>
     <title>FACON - 기프티콘 낚시</title>
     <meta charset="utf-8"/>
-    <!-- 카카오 SDK 로드 -->
     <script src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
 </head>
 <body>
-    <!-- 로그인 버튼 -->
     <button id="kakao-login-btn">카카오 로그인</button>
 
+    <h3>보낼 페이크 메시지를 선택하세요:</h3>
+    <div id="message-buttons" style="display:none;">
+        <!-- 메시지 버튼들이 여기 생성됨 -->
+    </div>
+
     <script>
-        // 1. SDK 초기화
         Kakao.init('4c62b1f03c15f3974661385234e62229');
 
-        // 2. 페이지 로드시 로그인 상태면 사용자 정보 요청
-        if (Kakao.Auth.getAccessToken()) {
+        let friendUUIDs = [];  // 친구 UUID 저장용
+
+        // 로그인 성공 후 실행할 함수
+        function afterLogin() {
+            // 사용자 정보 요청 (닉네임 출력)
             Kakao.API.request({
                 url: '/v2/user/me',
                 success: function(response) {
-                    console.log('페이지 로드 시 사용자 정보', response);
-                    console.log('닉네임:', response.properties.nickname); // ✅ 닉네임 출력
+                    let nickname = response['properties']['nickname'];
+                    console.log(nickname);
                 },
                 fail: function(error) {
-                    console.log('페이지 로드 시 요청 실패', error);
+                    console.error(error);
                 }
             });
-        } else {
-            console.log('로그인된 상태가 아닙니다.');
+
+            // 친구 목록 요청 (friends scope 필요)
+            Kakao.API.request({
+                url: '/v1/api/talk/friends'
+            }).then(function(res) {
+                friendUUIDs = res.elements.map(el => el.uuid);
+                console.log('친구 UUID 목록:', friendUUIDs);
+
+                if(friendUUIDs.length === 0) {
+                    alert('친구가 없습니다. 메시지 전송 불가.');
+                    return;
+                }
+
+                // 메시지 버튼 생성
+                const messages = [
+                    "오늘 당첨되셨습니다!",
+                    "배송이 지연됩니다. 확인 바랍니다.",
+                    "인증번호: 582193"
+                ];
+
+                const container = document.getElementById('message-buttons');
+                container.innerHTML = ''; // 초기화
+                messages.forEach(msg => {
+                    const btn = document.createElement('button');
+                    btn.textContent = msg;
+                    btn.onclick = () => sendKakaoMessage(msg);
+                    container.appendChild(btn);
+                });
+                container.style.display = 'block';
+            }).catch(function(err) {
+                console.error('친구 목록 요청 실패:', err);
+            });
         }
 
-        // 3. 로그인 버튼 클릭 시 동작
+        // 메시지 보내기 함수
+        function sendKakaoMessage(selectedMsg) {
+            if(friendUUIDs.length === 0) {
+                alert('친구 UUID가 없습니다.');
+                return;
+            }
+
+            // 예시로 첫번째 친구에게 보내기
+            const receiver = friendUUIDs[0];
+
+            Kakao.API.request({
+                url: '/v1/api/talk/friends/message/send',
+                data: {
+                    receiver_uuids: [receiver],
+                    template_id: 120980,
+                    template_args: {
+                        message: selectedMsg
+                    }
+                }
+            }).then(function(response) {
+                alert('메시지 전송 성공!');
+                console.log(response);
+            }).catch(function(error) {
+                alert('메시지 전송 실패');
+                console.error(error);
+            });
+        }
+
+        // 페이지 로드시 로그인 토큰 있으면 자동 실행
+        if (Kakao.Auth.getAccessToken()) {
+            afterLogin();
+        }
+
+        // 로그인 버튼 클릭
         document.getElementById('kakao-login-btn').addEventListener('click', function() {
             Kakao.Auth.login({
-                success: function(authObj) {
-                    console.log('로그인 성공', authObj);
-
-                    // 로그인 후 사용자 정보 요청
-                    Kakao.API.request({
-                        url: '/v2/user/me',
-                        success: function(response) {
-                            console.log('로그인 후 사용자 정보', response);
-                            console.log('닉네임:', response.properties.nickname); // ✅ 닉네임 출력
-                        },
-                        fail: function(error) {
-                            console.error('사용자 정보 요청 실패', error);
-                        }
-                    });
+                scope: 'friends',
+                success: function() {
+                    afterLogin();
                 },
                 fail: function(err) {
-                    console.error('로그인 실패', err);
+                    console.error('로그인 실패:', err);
                 }
             });
         });
